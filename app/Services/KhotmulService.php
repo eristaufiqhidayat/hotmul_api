@@ -86,6 +86,16 @@ class KhotmulService
 
         Log::info('Cron khotmul END', ['time' => now()]);
     }
+    /**
+     * Lama satu periode (README: 1 juz per 2 pekan).
+     */
+    public const HARI_PER_PERIODE = 14;
+
+    /**
+     * Maksimal anggota per grup (README: 30 anggota, 1 anggota = 1 juz).
+     */
+    public const MAKS_ANGGOTA = 30;
+
     public function runNextPeriode()
     {
         LogsCrond::create([
@@ -112,8 +122,8 @@ class KhotmulService
 
                 Log::warning('Belum ada periode');
 
-                $start = now();
-                $end = now()->copy()->addDays(6);
+                $start = Carbon::today();
+                $end = $start->copy()->addDays(self::HARI_PER_PERIODE - 1);
 
                 DB::table('khotmul_periode')->insert([
                     'periode' => 1,
@@ -124,33 +134,29 @@ class KhotmulService
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-               
+
+                // periode pertama juga langsung dibagi juz-nya
+                $this->assignJuz(null, 1, $start, $end);
+
                 Log::info('Periode pertama berhasil dibuat');
 
                 return;
             }
 
             // =========================================
-            // CEK APAKAH MASIH ACTIVE
+            // CEK APAKAH PERIODE SUDAH BERAKHIR
             // =========================================
-            $now = Carbon::now();
-
-            $mulai = Carbon::parse($lastPeriode->tanggal_mulai);
+            // Periode dianggap berjalan sampai akhir hari tanggal_selesai.
+            // Periode yang belum mulai (tanggal_mulai di masa depan) juga
+            // bukan alasan untuk membuat periode baru.
             $selesai = Carbon::parse($lastPeriode->tanggal_selesai);
 
-            $isActiveDate = $now->between($mulai, $selesai);
-
-            // =========================================
-            // JIKA MASIH DALAM RENTANG TANGGAL
-            // =========================================
-            if ($isActiveDate) {
+            if (now()->lte($selesai->copy()->endOfDay())) {
 
                 Log::info('Periode masih aktif', [
                     'periode' => $lastPeriode->periode,
-                    'tanggal_mulai' => $mulai,
                     'tanggal_selesai' => $selesai,
                 ]);
-                // echo "Periode masih aktif\n";
                 return;
             }
 
@@ -169,8 +175,15 @@ class KhotmulService
             // =========================================
             $periodeBaru = $lastPeriode->periode + 1;
 
-            $startBaru = $selesai->copy()->addDay();
-            $endBaru = $startBaru->copy()->addDays(14);
+            $startBaru = $selesai->copy()->startOfDay()->addDay();
+
+            // kalau cron sempat mati lama, mulai dari hari ini
+            // supaya tidak membuat banyak periode yang sudah lewat
+            if ($startBaru->lt(Carbon::today())) {
+                $startBaru = Carbon::today();
+            }
+
+            $endBaru = $startBaru->copy()->addDays(self::HARI_PER_PERIODE - 1);
 
             DB::table('khotmul_periode')->insert([
                 'periode' => $periodeBaru,
@@ -189,42 +202,108 @@ class KhotmulService
             // =========================================
             // GENERATE ASSIGNMENT BARU
             // =========================================
-            $this->newPeriode($lastPeriode->periode);
+            $this->newPeriode($lastPeriode->periode, $periodeBaru, $startBaru, $endBaru);
         });
 
         Log::info('RUN NEXT PERIODE END', [
             'time' => now()
         ]);
     }
-    public function newPeriode($periodeBefore)
+    public function newPeriode($periodeBefore, $periodeBaru, $start, $end)
     {
-        $periodes = DB::table('juz_assignments')->where('period_index', '=', $periodeBefore)
-            ->orderBy('group_id', 'ASC')
-            ->orderBy('juz_number', 'ASC')
-            ->get();
+        // juz yang belum selesai sampai akhir periode → terlambat
         $updated = DB::table('juz_assignments')
-            //->where('period_index', $periodeBefore)
             ->where('status', 'active')
             ->update([
                 'status' => 'late',
                 'updated_at' => now(),
             ]);
 
-        dump("TOTAL UPDATED: " . $updated);
-        $activeExists = DB::table('khotmul_periode')
-            ->where('status', 'active')
-            ->first();
-        foreach ($periodes as $periode) {
-            $juzBaru = $periode->juz_number == 30 ? 1 : $periode->juz_number + 1;
-            echo $periode->group_id . '-' . $periode->user_id . '-' . $periode->juz_number . '-' . $juzBaru . '-' . $periode->period_index . "\n";
-            JuzAssignment::create([
-                'group_id' => $periode->group_id,
-                'user_id' => $periode->user_id,
-                'juz_number' => $juzBaru,
-                'period_index' => $activeExists->periode,
-                'start_date' => $activeExists->tanggal_mulai,
-                'end_date' => $activeExists->tanggal_selesai,
-                'status' => 'active',
+        Log::info('Assignment ditandai late', ['total' => $updated]);
+
+        $this->assignJuz($periodeBefore, $periodeBaru, $start, $end);
+    }
+
+    /**
+     * Bagi juz untuk satu periode ke setiap grup.
+     *
+     * - Anggota yang sudah punya juz di periode sebelumnya bergeser ke
+     *   juz berikutnya (30 kembali ke 1).
+     * - Anggota baru di grup mendapat juz yang masih kosong.
+     * - Grup tidak perlu lengkap 30 orang; maksimal 30 anggota yang dapat juz.
+     */
+    public function assignJuz($periodeBefore, $periode, $start, $end)
+    {
+        $groupIds = User::whereNotNull('group_id')
+            ->where('group_id', '>', 0)
+            ->distinct()
+            ->pluck('group_id');
+
+        foreach ($groupIds as $groupId) {
+
+            $exists = JuzAssignment::where('group_id', $groupId)
+                ->where('period_index', $periode)
+                ->exists();
+
+            if ($exists) {
+                Log::warning('Periode sudah ada, skip', [
+                    'group_id' => $groupId,
+                    'periode' => $periode
+                ]);
+                continue;
+            }
+
+            $memberIds = User::where('group_id', $groupId)
+                ->orderBy('id')
+                ->pluck('id')
+                ->all();
+
+            $previous = $periodeBefore
+                ? JuzAssignment::where('group_id', $groupId)
+                    ->where('period_index', $periodeBefore)
+                    ->whereNotNull('user_id')
+                    ->pluck('juz_number', 'user_id')
+                    ->all()
+                : [];
+
+            $plan = [];
+            foreach ($memberIds as $userId) {
+                if (isset($previous[$userId])) {
+                    $plan[$userId] = $previous[$userId] % 30 + 1;
+                }
+            }
+
+            $free = array_values(array_diff(range(1, 30), $plan));
+            $newcomers = array_values(array_diff($memberIds, array_keys($plan)));
+            shuffle($newcomers);
+
+            foreach ($newcomers as $userId) {
+                if (empty($free)) {
+                    Log::warning('Grup melebihi 30 anggota, sisa anggota tidak mendapat juz', [
+                        'group_id' => $groupId,
+                        'user_id' => $userId,
+                    ]);
+                    break;
+                }
+                $plan[$userId] = array_shift($free);
+            }
+
+            foreach ($plan as $userId => $juz) {
+                JuzAssignment::create([
+                    'group_id' => $groupId,
+                    'user_id' => $userId,
+                    'juz_number' => $juz,
+                    'period_index' => $periode,
+                    'start_date' => $start,
+                    'end_date' => $end,
+                    'status' => 'active',
+                ]);
+            }
+
+            Log::info('Generate juz', [
+                'group_id' => $groupId,
+                'periode' => $periode,
+                'total' => count($plan),
             ]);
         }
     }

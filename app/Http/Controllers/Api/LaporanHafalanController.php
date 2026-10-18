@@ -24,6 +24,15 @@ class LaporanHafalanController extends Controller
                     ->where('status', 'active')
                     ->first();
 
+                if (!$periodeActive) {
+                    return response()->json([
+                        'success' => true,
+                        'periode' => null,
+                        'message' => 'Belum ada periode aktif',
+                        'data' => []
+                    ]);
+                }
+
                 $periode = $periodeActive->periode;
             }
 
