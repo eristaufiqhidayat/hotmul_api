@@ -28,8 +28,8 @@ class AuthService
      */
     public function curl_ngirimwa_meta_templateBak($to, $message)
     {
-        $appkey = 'https://graph.facebook.com/v18.0/244876815379879/messages';
-        $authkey = "EAA0ZBuZBvbqusBO0sTcLaUlcQaKTkR5we2PbAlRL4lR3ByZA09WW99yUma3hxHChIsinczey1xxeKQG79DUKuZCh6636E9uyMuzHtxdvXHTEvVM7M6soGr3LSpFnZCuNbCizmFTPZAi9njo75joZBuHOTZAmmZC0dnYAs0XZCkhZADAA6tfZCsulmiP3ljoZA08ptSqqY";
+        $appkey = 'https://graph.facebook.com/v18.0/' . config('services.whatsapp.phone_number_id') . '/messages';
+        $authkey = config('services.whatsapp.token');
         //$to = "+628118684222";
         //curl -i -X POST https://graph.facebook.com/v13.0/<YOUR PHONE NUMBER ID>/messages -H 'Authorization: Bearer <YOUR ACCESS TOKEN>' -H 'Content-Type: application/json' -d '{ "messaging_product": "whatsapp", "to": "<PHONE NUMBER TO MESSAGE>", "type": "template", "template": { "name": "hello_world", \"language\": { \"code\": \"en_US\" } } }'
         $text = array(
@@ -55,9 +55,9 @@ class AuthService
     }
     public function curl_ngirimwa_meta_template($to, $message)
     {
-        $url = 'https://webhook.lembaharafah.com/webhook.php';
+        $url = config('services.whatsapp.webhook_url');
         $data = [
-            'terimawa' =>'ginougi',
+            'terimawa' => config('services.whatsapp.webhook_sender'),
             'nohp' => $to,
             'message' => $message
         ];

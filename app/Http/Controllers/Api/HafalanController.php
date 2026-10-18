@@ -49,6 +49,16 @@ class HafalanController extends Controller
             ], 422);
         }
 
+        // target = jumlah ayat juz ini (0 jika referensi belum diisi)
+        $targetAyat = (int) (JuzReference::where('juz_number', $assignment->juz_number)
+            ->value('total_ayat') ?? 0);
+
+        if ($targetAyat > 0 && $request->ayat_to > $targetAyat) {
+            return response()->json([
+                'message' => "Ayat akhir maksimal {$targetAyat}"
+            ], 422);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -68,18 +78,17 @@ class HafalanController extends Controller
                 ]
             );
 
-            // 🔥 HITUNG TOTAL AYAT
-            $total = HafalanLog::where('assignment_id', $assignment->id)
-                ->sum(DB::raw('(ayat_to - ayat_from + 1)'));
+            // 🔥 HITUNG AYAT YANG SUDAH DISETOR (tanpa dobel hitung)
+            $total = $this->ayatTercapai($assignment->id);
 
-            // 🔥 OPTIONAL: AUTO DONE (kalau sudah selesai)
-            // misalnya target 200 ayat (ambil dari tabel lain kalau ada)
-            $targetAyat = 200;
+            // ✅ SELESAI hanya jika seluruh ayat juz sudah disetor
+            if ($targetAyat > 0 && $total >= $targetAyat) {
+                $assignment->status = 'done';
+                $assignment->save();
 
-            //if ($total >= $targetAyat) {
-            $assignment->status = 'done';
-            $assignment->save();
-            //}
+                $log->status = 'selesai';
+                $log->save();
+            }
 
             DB::commit();
 
@@ -87,6 +96,7 @@ class HafalanController extends Controller
                 'message' => 'Setoran berhasil',
                 'data' => $log,
                 'total_ayat' => $total,
+                'target_ayat' => $targetAyat,
                 'status_assignment' => $assignment->status
             ]);
         } catch (\Exception $e) {
@@ -98,28 +108,85 @@ class HafalanController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Jumlah ayat berbeda yang sudah disetor untuk satu assignment
+     * (gabungan semua rentang ayat_from–ayat_to, irisan dihitung sekali).
+     */
+    private function ayatTercapai($assignmentId): int
+    {
+        $ranges = HafalanLog::where('assignment_id', $assignmentId)
+            ->whereNotNull('ayat_from')
+            ->whereNotNull('ayat_to')
+            ->orderBy('ayat_from')
+            ->get(['ayat_from', 'ayat_to']);
+
+        $total = 0;
+        $from = null;
+        $to = null;
+
+        foreach ($ranges as $range) {
+            if ($to === null || $range->ayat_from > $to + 1) {
+                if ($to !== null) {
+                    $total += $to - $from + 1;
+                }
+                $from = $range->ayat_from;
+                $to = $range->ayat_to;
+            } else {
+                $to = max($to, $range->ayat_to);
+            }
+        }
+
+        if ($to !== null) {
+            $total += $to - $from + 1;
+        }
+
+        return $total;
+    }
+
     public function today()
     {
         $user = auth()->user();
-        Log::info('MASUK TODAY', ['user_id' => $user->id]);
+
+        // ❗ user belum dimasukkan admin ke grup
+        if (empty($user->group_id)) {
+            return response()->json([
+                'group_id' => null,
+                'group_name' => null,
+                'periode' => null,
+                'message' => 'Akun belum dimasukkan ke grup',
+                'data' => []
+            ]);
+        }
+
         $group = \App\Models\Group::find($user->group_id);
+        $groupId = (int) $user->group_id;
+        $groupName = $group->name ?? "Grup {$groupId}";
+
         $khotmul_periode = \App\Models\Khotmulperiode::where('status', 'active')
             ->first();
-        $periode = $group->periode + $khotmul_periode->periode;
-        Log::info('GROUP CHECK', ['group' => $group]);
-        if (!$group) {
-            return response()->json(['data' => []]);
-        }
-        Log::info('User group', ['group_id' => $group->id, 'group_name' => $group->name]);
-        $members = User::where('group_id', $group->id)->get();
-        Log::info('Group members', ['count' => $members->count()]);
 
-        $data = $members->map(function ($user) use ($group, $khotmul_periode) {
-            Log::info('Processing user', ['user_id' => $user->id, 'user_name' => $user->name]);
+        // ❗ admin belum membuat periode aktif
+        if (!$khotmul_periode) {
+            return response()->json([
+                'group_id' => $groupId,
+                'group_name' => $groupName,
+                'periode' => null,
+                'message' => 'Belum ada periode aktif',
+                'data' => []
+            ]);
+        }
+
+        $periode = ($group->periode ?? 0) + $khotmul_periode->periode;
+
+        $members = User::where('group_id', $groupId)->get();
+        Log::info('Group members', ['group_id' => $groupId, 'count' => $members->count()]);
+
+        $data = $members->map(function ($user) use ($groupId, $khotmul_periode) {
 
             $assignment = \App\Models\JuzAssignment::where('user_id', $user->id)
                 ->where('period_index', $khotmul_periode->periode)
-                ->whereIn('status', ['active', 'done'])
+                ->whereIn('status', ['active', 'done', 'late'])
                 ->first();
 
             $log = \App\Models\HafalanLog::where('user_id', $user->id)
@@ -130,22 +197,13 @@ class HafalanController extends Controller
             $targetAyat = 0;
 
             if ($assignment) {
-                // ✅ ambil log TERAKHIR (bukan sum)
-                $lastLog = \App\Models\HafalanLog::where('assignment_id', $assignment->id)
-                    ->orderBy('tanggal', 'desc')
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                if ($lastLog) {
-                    $totalAyat = ($lastLog->ayat_to - $lastLog->ayat_from + 1);
-                }
+                $totalAyat = $this->ayatTercapai($assignment->id);
 
                 $targetAyat = \App\Models\JuzReference::where('juz_number', $assignment->juz_number)
                     ->value('total_ayat') ?? 0;
             }
-            Log::info('Assignment', [$assignment]);
             $member = GroupMember::where('user_id', $user->id)
-                ->where('group_id', $group->id)
+                ->where('group_id', $groupId)
                 ->first();
             return [
                 'id' => $user->id,
@@ -160,17 +218,16 @@ class HafalanController extends Controller
                 'ayat_from' => optional($log)->ayat_from,
                 'ayat_to' => optional($log)->ayat_to,
 
-                'total_ayat' => (int) $totalAyat,   // 🔥 FIX
-                'target_ayat' => (int) $targetAyat, // 🔥 FIX
+                'total_ayat' => (int) $totalAyat,
+                'target_ayat' => (int) $targetAyat,
                 'periode_index' => optional($assignment)->period_index,
             ];
         });
         return response()->json([
-            'group_id' => $group->id,
-            'group_name' => $group->name,
+            'group_id' => $groupId,
+            'group_name' => $groupName,
             'periode' => $periode,
             'data' => $data
         ]);
-        //return response()->json(['data' => $data]);
     }
 }

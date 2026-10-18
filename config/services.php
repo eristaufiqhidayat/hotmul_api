@@ -28,6 +28,14 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Pengiriman OTP lewat WhatsApp (lihat App\Services\AuthService)
+    'whatsapp' => [
+        'token' => env('WHATSAPP_META_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_META_PHONE_NUMBER_ID', '244876815379879'),
+        'webhook_url' => env('WHATSAPP_WEBHOOK_URL', 'https://webhook.lembaharafah.com/webhook.php'),
+        'webhook_sender' => env('WHATSAPP_WEBHOOK_SENDER', 'ginougi'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

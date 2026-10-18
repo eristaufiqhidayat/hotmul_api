@@ -39,21 +39,21 @@ Route::group(['prefix' => 'v1'], function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
 
-    Route::post('/refresh', [AuthController::class, 'refresh']);
     // Public API endpoints (if any)
     Route::get('/public-posts', [PostController::class, 'index']);
     Route::get('/ayah-range', [AyahController::class, 'range']);
-
-    Route::get(
-        '/laporan-hafalan/{id}',
-        [LaporanHafalanController::class, 'laporanByDaurah']
-    );
 });
 
 // Protected routes (require JWT authentication)
 Route::group(['prefix' => 'v1', 'middleware' => 'auth:sanctum'], function () {
 
-    Route::get('/assignments/today', [AssignmentController::class, 'today']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
+
+    Route::get(
+        '/laporan-hafalan/{id}',
+        [LaporanHafalanController::class, 'laporanByDaurah']
+    );
+
     Route::put(
         '/khatam/update-status',
         [AssignmentController::class, 'updateStatus']

@@ -30,13 +30,14 @@ class AssignmentController extends Controller
     }
     public function updateStatus(Request $request)
     {
-        try {
+        $this->pastikanAdmin();
 
-            // $request->validate([
-            //     'name'   => 'required',
-            //     'juz'    => 'required',
-            //     'status' => 'required',
-            // ]);
+        $request->validate([
+            'assignment_id' => 'required|integer',
+            'status' => 'required|in:active,done,late',
+        ]);
+
+        try {
 
             $data = JuzAssignment::leftJoin(
                 'users',

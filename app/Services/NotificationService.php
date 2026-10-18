@@ -14,7 +14,9 @@ class NotificationService
         $today = Carbon::today();
 
         // ambil assignment aktif
-        $assignments = JuzAssignment::where('status', 'active')->get();
+        $assignments = JuzAssignment::where('status', 'active')
+            ->whereNotNull('user_id')
+            ->get();
 
         foreach ($assignments as $assignment) {
 
@@ -34,13 +36,23 @@ class NotificationService
             }
 
             // =========================
-            // 2. H-2 DEADLINE
+            // 2. H-3 DAN H-1 DEADLINE (README 4.4)
             // =========================
-            if ($today->equalTo(Carbon::parse($assignment->end_date)->subDays(2))) {
+            $sisaHari = $today->diffInDays(Carbon::parse($assignment->end_date)->startOfDay(), false);
+
+            if ($sisaHari == 3) {
                 $this->createNotification(
                     $assignment->user_id,
-                    'Deadline Mendekat',
-                    'Sisa 2 hari lagi untuk menyelesaikan hafalan'
+                    'Deadline H-3',
+                    "Sisa 3 hari lagi untuk menyelesaikan hafalan Juz {$assignment->juz_number}"
+                );
+            }
+
+            if ($sisaHari == 1) {
+                $this->createNotification(
+                    $assignment->user_id,
+                    'Deadline H-1',
+                    "Besok batas akhir hafalan Juz {$assignment->juz_number}"
                 );
             }
 
