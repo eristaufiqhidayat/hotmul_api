@@ -14,8 +14,6 @@ class RewardController extends Controller
     // List semua daurah
 public function index(Request $request)
 {
-    \DB::enableQueryLog();
-    $grouuser = auth()->user()->group_id;
 
     $query = Reward::query()
         ->join('users', 'reward.anggota_id', '=', 'users.id')
@@ -26,12 +24,13 @@ public function index(Request $request)
             'reward.rp',
             'users.name as anggota_name'
         );
-    $grouuser != '1'? $query->where('reward.anggota_id','=',auth()->user()->id) : null;
+    // anggota hanya melihat reward miliknya; admin melihat semua
+    if (auth()->user()->role !== 'admin') {
+        $query->where('reward.anggota_id', auth()->id());
+    }
 
     $data = $query->orderBy('reward.id', 'desc')->paginate(7);
 
-
-    \Log::info('Generated SQL Query: ' . $grouuser, \DB::getQueryLog());
 
     return response()->json($data);
 }
@@ -40,7 +39,11 @@ public function index(Request $request)
     // Simpan daurah baru
 public function store(Request $request)
 {
-    $data = $request->all();
+    $data = $request->validate([
+        'anggota_id' => 'required|integer|exists:users,id',
+        'keterangan' => 'nullable|string|max:200',
+        'rp'         => 'required|numeric|min:0',
+    ]);
 
     $donasi = Reward::create($data);
 

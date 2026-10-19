@@ -73,24 +73,25 @@ Route::group(['prefix' => 'v1', 'middleware' => 'auth:sanctum'], function () {
     Route::put('/updateUser/{id}', [AuthController::class, 'update']);
     // Posts resource
     Route::apiResource('/posts', PostController::class);
-    Route::apiResource('anggota', AnggotaController::class);
+    Route::apiResource('anggota', AnggotaController::class)->only(['index', 'show']);
     Route::get('/anggota2', [AnggotaController::class, 'index2']);
     Route::get('/indexByGroup', [AnggotaController::class, 'indexByGroup']);
-    Route::apiResource('daurah', DaurahController::class);
+    Route::apiResource('daurah', DaurahController::class)->only(['index', 'show']);
     Route::get('/periodeDaurah', [DaurahController::class, 'periodeDaurah']);
 
     Route::get('cekJumlahGroupAnggota', [DaurahController::class, 'cekJumlahGroupAnggota']);
     Route::get('/getDaurahData', [DaurahController::class, 'getDaurahData']);
     Route::get('/reportDaurah', [DaurahController::class, 'reportDaurah']);
 
-    Route::apiResource('khatam', KhatamController::class);
-    Route::apiResource('donasi', DonasiController::class);
-    Route::apiResource('reward', RewardController::class);
-    Route::apiResource('jadwal', JadwalController::class);
-    Route::apiResource('groupUser', groupUserController::class);
-    Route::get('khotmulPeriode', [khotmulPeriodeController::class, 'index']);
-    Route::get('khotmulPeriodeSync', [khotmulPeriodeController::class, 'Sync']);
-    Route::get('khotmulPeriodeCreate', [khotmulPeriodeController::class, 'createPeriode']);
+    Route::apiResource('khatam', KhatamController::class)->only(['index', 'show']);
+    // anggota boleh mencatat donasinya sendiri; ubah/hapus hanya admin
+    Route::apiResource('donasi', DonasiController::class)->only(['index', 'show', 'store']);
+    Route::apiResource('reward', RewardController::class)->only(['index', 'show']);
+    Route::apiResource('jadwal', JadwalController::class)->only(['index', 'show']);
+    Route::apiResource('groupUser', groupUserController::class)->only(['index', 'show']);
+    Route::get('khotmulPeriode', [KhotmulPeriodeController::class, 'index']);
+    // khotmulPeriodeSync (TRUNCATE khotmul_periode) dan khotmulPeriodeCreate
+    // dihapus: periode dibuat otomatis oleh cron:khotmul (KhotmulService).
     Route::get(
         '/khotmul-periode',
         [KhotmulPeriodeController::class, 'show']
@@ -99,24 +100,9 @@ Route::group(['prefix' => 'v1', 'middleware' => 'auth:sanctum'], function () {
         '/khotmul-periode/last',
         [KhotmulPeriodeController::class, 'last']
     );
-    Route::post(
-        '/khotmul-periode',
-        [KhotmulPeriodeController::class, 'store']
-    );
-
-    Route::put(
-        '/khotmul-periode/{id}',
-        [KhotmulPeriodeController::class, 'update']
-    );
-
-    Route::delete(
-        '/khotmul-periode/{id}',
-        [KhotmulPeriodeController::class, 'destroy']
-    );
 
     Route::get('/khotmul', [KhotmulController::class, 'index']);
     Route::get('/khotmul/anggota/{anggota_id}', [KhotmulController::class, 'indexAnggotaId']);
-    Route::get('/khotmul/generateData', [KhotmulController::class, 'generateData']);
     Route::post('/khotmul/updateStatus/{id}', [KhotmulController::class, 'updateStatus']);
     //Route::post('/khotmul/upload', [KhotmulController::class, 'store'])->name('file.upload');
     Route::get('/khotmul/stats', [KhotmulController::class, 'getAnggotaKhotmulStats']);
@@ -148,4 +134,21 @@ Route::group(['prefix' => 'v1', 'middleware' => 'auth:sanctum'], function () {
 
     // Get accurate calculation by juz
     Route::get('/juz-accurate/{juz?}', [JuzController::class, 'getAccurateJuzByNumber']);
+});
+
+// Admin only (users.role = admin)
+Route::group(['prefix' => 'v1', 'middleware' => ['auth:sanctum', 'admin']], function () {
+    Route::apiResource('anggota', AnggotaController::class)->only(['store', 'update', 'destroy']);
+    Route::apiResource('daurah', DaurahController::class)->only(['store', 'update', 'destroy']);
+    Route::apiResource('khatam', KhatamController::class)->only(['store', 'update', 'destroy']);
+    Route::apiResource('donasi', DonasiController::class)->only(['update', 'destroy']);
+    Route::apiResource('reward', RewardController::class)->only(['store', 'update', 'destroy']);
+    Route::apiResource('jadwal', JadwalController::class)->only(['store', 'update', 'destroy']);
+    Route::apiResource('groupUser', groupUserController::class)->only(['store', 'update', 'destroy']);
+
+    Route::post('/khotmul-periode', [KhotmulPeriodeController::class, 'store']);
+    Route::put('/khotmul-periode/{id}', [KhotmulPeriodeController::class, 'update']);
+    Route::delete('/khotmul-periode/{id}', [KhotmulPeriodeController::class, 'destroy']);
+
+    Route::get('/khotmul/generateData', [KhotmulController::class, 'generateData']);
 });

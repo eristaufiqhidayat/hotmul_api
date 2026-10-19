@@ -12,5 +12,5 @@ class Donasi extends Model
 	public $timestamps = false;
     protected $table = 'donasi';
     protected $primaryKey = 'id';
-    protected $fillable = ['id','user_id','tanggal','rp']; // field yang bisa diisi mass assignment
+    protected $fillable = ['user_id','tanggal','rp']; // field yang bisa diisi mass assignment
 }
