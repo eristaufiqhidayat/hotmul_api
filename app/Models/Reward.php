@@ -12,5 +12,5 @@ class Reward extends Model
     public $timestamps = false;
     protected $table = 'reward';
     protected $primaryKey = 'id';
-    protected $fillable = ['id','anggota_id','keterangan','rp']; // field yang bisa diisi mass assignment
+    protected $fillable = ['anggota_id','keterangan','rp']; // field yang bisa diisi mass assignment
 }

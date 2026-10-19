@@ -14,11 +14,15 @@ class DonasiController extends Controller
     public function index(Request $request)
     {
         try {
-            \DB::enableQueryLog();
-            $data = Donasi::leftJoin('users', 'donasi.user_id', '=', 'users.id')
-                ->select('donasi.*', 'users.name')
-                ->paginate(10);
-            \Log::info(\DB::getQueryLog());
+            $query = Donasi::leftJoin('users', 'donasi.user_id', '=', 'users.id')
+                ->select('donasi.*', 'users.name');
+
+            // anggota hanya melihat donasinya sendiri
+            if (auth()->user()->role !== 'admin') {
+                $query->where('donasi.user_id', auth()->id());
+            }
+
+            $data = $query->orderByDesc('donasi.tanggal')->paginate(10);
             Log::info('Data donasi berhasil diambil', ['count' => $data->count()]);
 
             return response()->json($data);
@@ -38,7 +42,16 @@ class DonasiController extends Controller
     // Simpan daurah baru
     public function store(Request $request)
     {
-        $data = $request->all();
+        $data = $request->validate([
+            'user_id' => 'nullable|integer|exists:users,id',
+            'tanggal' => 'required|date',
+            'rp'      => 'required|numeric|min:1',
+        ]);
+
+        // anggota hanya boleh mencatat donasi atas namanya sendiri
+        if (auth()->user()->role !== 'admin' || empty($data['user_id'])) {
+            $data['user_id'] = auth()->id();
+        }
 
         $donasi = Donasi::create($data);
 
@@ -51,11 +64,11 @@ class DonasiController extends Controller
     // Tampilkan 1 daurah
     public function show($id)
     {
-        $daurah = Khatam::find($id);
-        if (!$daurah) {
-            return response()->json(['message' => 'Daurah not found'], 404);
+        $donasi = Donasi::find($id);
+        if (!$donasi || (auth()->user()->role !== 'admin' && $donasi->user_id != auth()->id())) {
+            return response()->json(['message' => 'Donasi not found'], 404);
         }
-        return response()->json($daurah);
+        return response()->json($donasi);
     }
 
     // Update daurah
@@ -64,8 +77,8 @@ class DonasiController extends Controller
         // Validasi data yang masuk
         $validated = $request->validate([
             'user_id'             => 'required|integer',
-            'tanggal'       => 'required',
-            'rp'   => 'required',
+            'tanggal'       => 'required|date',
+            'rp'   => 'required|numeric|min:1',
         ]);
 
         // Cari data berdasarkan ID

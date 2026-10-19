@@ -39,6 +39,11 @@ class KhotmulRecController extends Controller
      */
     public function store(Request $request)
     {
+        $request->validate([
+            'khotmul_id' => 'required|integer',
+            // rekaman audio, maks 50 MB (README FR-08)
+            'file' => 'required|file|max:51200|mimes:m4a,mp4,mp3,aac,wav,ogg,3gp,webm',
+        ]);
 
         if ($request->hasFile('file')) {
             $file = $request->file('file');

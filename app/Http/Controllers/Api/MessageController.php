@@ -15,14 +15,19 @@ class MessageController extends Controller
     public function send(Request $request)
     {
         $request->validate([
-            'sender_id' => 'required|exists:users,id',
             'target_type' => 'required|in:user,group,all',
             'target_id' => 'nullable|integer',
             'content' => 'required|string',
         ]);
 
+        // kirim ke grup / semua anggota hanya untuk admin
+        if ($request->target_type !== 'user') {
+            $this->pastikanAdmin();
+        }
+
+        // pengirim selalu user login, bukan dari body request
         $message = Message::create([
-            'sender_id' => $request->sender_id,
+            'sender_id' => auth()->id(),
             'target_type' => $request->target_type,
             'target_id' => $request->target_id,
             'content' => $request->get('content'),
@@ -53,8 +58,19 @@ class MessageController extends Controller
         ]);
     }
 
+    /**
+     * Anggota hanya boleh membaca kotak masuknya sendiri; admin boleh semua.
+     */
+    private function pastikanPemilik($userId): void
+    {
+        $me = auth()->user();
+        abort_unless($me->role === 'admin' || (int) $userId === (int) $me->id, 403, 'Tidak boleh membaca pesan user lain');
+    }
+
     public function inbox($userId)
     {
+        $this->pastikanPemilik($userId);
+
         $messages = MessageUser::with('message.sender')
             ->where('user_id', $userId)
             ->orderBy('created_at', 'desc')
@@ -64,6 +80,8 @@ class MessageController extends Controller
     }
     public function countUnread($userId)
     {
+        $this->pastikanPemilik($userId);
+
         $count = DB::table('message_user')
             ->where('user_id', $userId)
             ->where('is_read', 0)
@@ -79,6 +97,7 @@ class MessageController extends Controller
         
         $updated = DB::table('message_user')
             ->where('id', $id)
+            ->where('user_id', auth()->id())
             ->update([
                 'is_read'    => 1, // isi 0 atau 1
                 'updated_at' => date('Y-m-d'),
