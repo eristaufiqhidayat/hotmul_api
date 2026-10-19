@@ -22,6 +22,11 @@ use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\HafalanController;
 use App\Http\Controllers\Api\LaporanHafalanController;
+use App\Http\Controllers\Api\BadalController;
+use App\Http\Controllers\Api\KasController;
+use App\Http\Controllers\Api\DokumentasiController;
+use App\Http\Controllers\Api\JadwalBergulirController;
+use App\Http\Controllers\Api\DeviceTokenController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -134,6 +139,30 @@ Route::group(['prefix' => 'v1', 'middleware' => 'auth:sanctum'], function () {
 
     // Get accurate calculation by juz
     Route::get('/juz-accurate/{juz?}', [JuzController::class, 'getAccurateJuzByNumber']);
+
+    // Jadwal bergulir (FR-02)
+    Route::get('/jadwal-bergulir', [JadwalBergulirController::class, 'index']);
+
+    // Badal + badge Pengganti Aktif (FR-06, FR-07)
+    Route::get('/badal', [BadalController::class, 'index']);
+    Route::post('/badal/{assignment}/ambil', [BadalController::class, 'ambil']);
+    Route::post('/badal/{id}/batal', [BadalController::class, 'batal']);
+    Route::get('/badges', [BadalController::class, 'badges']);
+
+    // Kas grup (FR-09)
+    Route::get('/kas', [KasController::class, 'index']);
+    Route::get('/kas/export', [KasController::class, 'export']);
+    Route::post('/kas', [KasController::class, 'store']);
+    Route::delete('/kas/{id}', [KasController::class, 'destroy']);
+
+    // Dokumentasi khotaman (FR-08)
+    Route::get('/dokumentasi', [DokumentasiController::class, 'index']);
+    Route::post('/dokumentasi', [DokumentasiController::class, 'store']);
+    Route::delete('/dokumentasi/{id}', [DokumentasiController::class, 'destroy']);
+
+    // Token FCM untuk push notification (FR-04)
+    Route::post('/device-token', [DeviceTokenController::class, 'store']);
+    Route::delete('/device-token', [DeviceTokenController::class, 'destroy']);
 });
 
 // Admin only (users.role = admin)
@@ -151,4 +180,6 @@ Route::group(['prefix' => 'v1', 'middleware' => ['auth:sanctum', 'admin']], func
     Route::delete('/khotmul-periode/{id}', [KhotmulPeriodeController::class, 'destroy']);
 
     Route::get('/khotmul/generateData', [KhotmulController::class, 'generateData']);
+
+    Route::post('/kas/{id}/verifikasi', [KasController::class, 'verifikasi']);
 });
