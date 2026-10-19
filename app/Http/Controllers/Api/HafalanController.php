@@ -28,15 +28,21 @@ class HafalanController extends Controller
         // ✅ AMBIL ASSIGNMENT
         $assignment = JuzAssignment::find($request->assignment_id);
 
-        // ❌ CEK KEPEMILIKAN
-        if ($assignment->user_id != auth()->id()) {
+        // badal yang sedang berjalan untuk juz ini (BRD FR-06)
+        $badal = \App\Models\BadalAssignment::where('assignment_id', $assignment->id)
+            ->where('status', 'active')
+            ->first();
+        $isPengganti = $badal && $badal->pengganti_user_id == auth()->id();
+
+        // ❌ CEK KEPEMILIKAN (pemilik juz atau penggantinya)
+        if ($assignment->user_id != auth()->id() && !$isPengganti) {
             return response()->json([
                 'message' => 'Unauthorized assignment'
             ], 403);
         }
 
-        // ❌ CEK STATUS
-        if ($assignment->status != 'active') {
+        // ❌ CEK STATUS (pengganti boleh melanjutkan juz yang terlambat)
+        if ($assignment->status != 'active' && !($isPengganti && $assignment->status == 'late')) {
             return response()->json([
                 'message' => 'Assignment sudah tidak aktif'
             ], 400);
@@ -88,6 +94,10 @@ class HafalanController extends Controller
 
                 $log->status = 'selesai';
                 $log->save();
+
+                if ($badal) {
+                    $badal->update(['status' => 'done', 'selesai_at' => now()]);
+                }
             }
 
             DB::commit();

@@ -36,6 +36,13 @@ return [
         'webhook_sender' => env('WHATSAPP_WEBHOOK_SENDER', 'ginougi'),
     ],
 
+    // Push notification Firebase Cloud Messaging (HTTP v1).
+    // FCM_CREDENTIALS = path file JSON service account dari Firebase Console.
+    'fcm' => [
+        'project_id' => env('FCM_PROJECT_ID'),
+        'credentials' => env('FCM_CREDENTIALS'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

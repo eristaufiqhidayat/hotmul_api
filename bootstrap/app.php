@@ -20,6 +20,14 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
                 $exceptions->render(function (Throwable $e, Request $request) {
+            // validasi gagal → 422 + daftar error (sebelumnya ikut jadi 500)
+            if ($e instanceof \Illuminate\Validation\ValidationException) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors' => $e->errors(),
+                ], $e->status);
+            }
+
             $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
 
             return response()->json([
