@@ -11,6 +11,7 @@ class NotificationController extends Controller
     {
         return \App\Models\Notification::where('user_id', auth()->id())
             ->latest()
+            ->limit(100)
             ->get();
     }
 }

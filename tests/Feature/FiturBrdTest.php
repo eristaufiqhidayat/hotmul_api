@@ -277,4 +277,22 @@ class FiturBrdTest extends TestCase
             ->assertJsonPath('sekarang.juz', 30)
             ->assertJsonCount(1, 'riwayat');
     }
+
+    public function test_badal_mengabaikan_periode_masa_depan_yang_rusak(): void
+    {
+        [, $group, [$budi, $citra]] = $this->grup(2);
+        $juzCitra = $this->juz($group, $citra, 3, 'late');
+        // data sisa bug cron lama: periode sangat besar bertanggal jauh ke depan
+        JuzAssignment::create([
+            'group_id' => $group->id, 'user_id' => $citra->id, 'juz_number' => 4,
+            'start_date' => '3641-01-08', 'end_date' => '3641-01-21',
+            'period_index' => 39318, 'status' => 'late',
+        ]);
+
+        Sanctum::actingAs($budi);
+
+        $this->getJson('/api/v1/badal')->assertOk()
+            ->assertJsonCount(1, 'kandidat')
+            ->assertJsonPath('kandidat.0.assignment_id', $juzCitra->id);
+    }
 }

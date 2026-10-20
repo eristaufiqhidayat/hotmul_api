@@ -15,8 +15,11 @@ class NotificationService
         $today = Carbon::today();
 
         // ambil assignment aktif
+        // abaikan juz yang belum mulai (termasuk data sisa bug cron lama
+        // yang bertanggal ratusan tahun ke depan)
         $assignments = JuzAssignment::where('status', 'active')
             ->whereNotNull('user_id')
+            ->whereDate('start_date', '<=', $today)
             ->get();
 
         foreach ($assignments as $assignment) {
