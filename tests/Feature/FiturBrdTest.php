@@ -243,4 +243,22 @@ class FiturBrdTest extends TestCase
         $this->postJson('/api/v1/device-token', ['token' => 'abc', 'platform' => 'android'])->assertOk();
         $this->assertSame(1, DB::table('device_tokens')->count());
     }
+
+    public function test_periode_daurah_dibatasi_periode_terbaru(): void
+    {
+        // kolom offset periode per grup ada di server, belum di migrations
+        Schema::table('groups', fn (Blueprint $t) => $t->integer('periode')->default(0));
+        [$admin] = $this->grup(0);
+        $rows = [];
+        for ($p = 1; $p <= 300; $p++) {
+            $rows[] = ['periode' => $p, 'status' => $p === 300 ? 'active' : 'done'];
+        }
+        DB::table('khotmul_periode')->insert($rows);
+
+        Sanctum::actingAs($admin);
+        $data = $this->getJson('/api/v1/periodeDaurah')->assertOk()->json('data');
+
+        $this->assertCount(26, $data);
+        $this->assertSame(300, end($data)['periode_khotmul']);
+    }
 }

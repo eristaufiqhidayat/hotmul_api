@@ -18,13 +18,22 @@ class DaurahController extends Controller
             'data' => $data
         ]);
     }
+    /** Jumlah periode terakhir untuk dropdown (26 × 2 pekan ≈ 1 tahun). */
+    private const MAKS_PERIODE = 26;
+
     public function periodeDaurah()
     {
         $groups = DB::table('groups')->get();
 
+        // hanya periode terbaru: tabel bisa berisi puluhan ribu baris (data
+        // lama cron), dan semua × semua grup membuat respon raksasa yang
+        // menghabiskan memori/waktu PHP
         $periodes = DB::table('khotmul_periode')
-            ->orderBy('periode')
-            ->get();
+            ->orderByDesc('periode')
+            ->limit(self::MAKS_PERIODE)
+            ->get()
+            ->sortBy('periode')
+            ->values();
 
         $data = $groups->flatMap(function ($group) use ($periodes) {
 
