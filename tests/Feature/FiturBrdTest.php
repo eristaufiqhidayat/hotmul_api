@@ -295,4 +295,22 @@ class FiturBrdTest extends TestCase
             ->assertJsonCount(1, 'kandidat')
             ->assertJsonPath('kandidat.0.assignment_id', $juzCitra->id);
     }
+
+    public function test_perintah_bersihkan_jadwal_rusak(): void
+    {
+        [, $group, [$budi]] = $this->grup(1);
+        $asli = $this->juz($group, $budi, 1);
+        $rusak = JuzAssignment::create([
+            'group_id' => $group->id, 'user_id' => $budi->id, 'juz_number' => 2,
+            'start_date' => '3641-01-08', 'end_date' => '3641-01-21',
+            'period_index' => 39318, 'status' => 'active',
+        ]);
+
+        $this->artisan('hotmul:bersihkan-jadwal-rusak')->assertSuccessful();
+        $this->assertDatabaseHas('juz_assignments', ['id' => $rusak->id]);
+
+        $this->artisan('hotmul:bersihkan-jadwal-rusak', ['--force' => true])->assertSuccessful();
+        $this->assertDatabaseMissing('juz_assignments', ['id' => $rusak->id]);
+        $this->assertDatabaseHas('juz_assignments', ['id' => $asli->id]);
+    }
 }
