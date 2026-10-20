@@ -10,7 +10,9 @@ use App\Models\JuzReference;
 use App\Models\User;
 use App\Models\UserBadge;
 use App\Services\KeaktifanService;
+use App\Services\KhotmulService;
 use App\Services\NotificationService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -38,12 +40,15 @@ class BadalController extends Controller
         $kandidat = [];
 
         if ($groupId) {
-            // hanya periode berjalan dan satu periode sebelumnya
-            $periodeTerakhir = JuzAssignment::where('group_id', $groupId)->max('period_index');
+            // hanya periode berjalan dan satu periode sebelumnya, dipilih
+            // dari tanggal (bukan max period_index) supaya data sisa bug
+            // cron lama yang bertanggal jauh ke depan tidak ikut terbaca
+            $hariIni = Carbon::today();
 
             $assignments = JuzAssignment::where('group_id', $groupId)
                 ->whereIn('status', ['active', 'late'])
-                ->where('period_index', '>=', ($periodeTerakhir ?? 0) - 1)
+                ->whereDate('start_date', '<=', $hariIni)
+                ->whereDate('end_date', '>=', $hariIni->copy()->subDays(KhotmulService::HARI_PER_PERIODE))
                 ->where('user_id', '!=', $me->id)
                 ->orderBy('juz_number')
                 ->get();
