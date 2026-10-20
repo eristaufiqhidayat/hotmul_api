@@ -19,14 +19,21 @@ class JadwalBergulirController extends Controller
     {
         $me = $request->user();
 
+        $hariIni = Carbon::today();
+
+        // abaikan juz yang mulainya jauh di masa depan: data sisa bug cron
+        // lama bisa berisi ribuan periode bertanggal ratusan tahun ke depan
         $riwayat = JuzAssignment::where('user_id', $me->id)
-            ->orderByDesc('period_index')
+            ->whereDate('start_date', '<=', $hariIni->copy()->addDays(KhotmulService::HARI_PER_PERIODE))
+            ->orderByDesc('start_date')
             ->limit(4)
             ->get()
-            ->sortBy('period_index')
+            ->sortBy('start_date')
             ->values();
 
-        $sekarang = $riwayat->firstWhere('status', 'active') ?? $riwayat->last();
+        $sekarang = $riwayat->first(fn ($a) => Carbon::parse($a->start_date)->lte($hariIni)
+                && Carbon::parse($a->end_date)->gte($hariIni))
+            ?? $riwayat->last();
 
         $hari = [];
         $berikutnya = [];

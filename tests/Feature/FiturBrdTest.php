@@ -261,4 +261,20 @@ class FiturBrdTest extends TestCase
         $this->assertCount(26, $data);
         $this->assertSame(300, end($data)['periode_khotmul']);
     }
+
+    public function test_jadwal_bergulir_mengabaikan_periode_masa_depan_yang_rusak(): void
+    {
+        [, $group, [$budi]] = $this->grup(1);
+        $this->juz($group, $budi, 30, 'active', '2026-10-13');
+        JuzAssignment::create([
+            'group_id' => $group->id, 'user_id' => $budi->id, 'juz_number' => 19,
+            'start_date' => '3641-01-08', 'end_date' => '3641-01-22',
+            'period_index' => 39318, 'status' => 'active',
+        ]);
+
+        Sanctum::actingAs($budi);
+        $this->getJson('/api/v1/jadwal-bergulir')->assertOk()
+            ->assertJsonPath('sekarang.juz', 30)
+            ->assertJsonCount(1, 'riwayat');
+    }
 }
